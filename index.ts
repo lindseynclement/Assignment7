@@ -36,3 +36,14 @@ console.log("Bob's Inbox (additional RLE):", bob.inbox);
 console.log("Decompressed RLE (additional):", rleDecompress(bob.inbox[1].body as string));
 console.log("Carol's Inbox (additional FFT):", carol.inbox);
 console.log("Decompressed FFT (20% Lossiness):", fftDecompress(carol.inbox[2].body as number[]));
+
+// Testing RSA Encryptions
+console.log("Testing RSA Encryption...");
+alice.sendMessage(bob, "This is a secret message!", "RSA");
+console.log("Bob's Inbox (Encrypted):", bob.inbox);
+console.log("Decrypted Message:", bob.inbox[0].body);
+
+// Testing Signed Messages
+console.log("\nTesting Signed Message...");
+alice.sendMessage(bob, "Important message with signature", "SIGNED");
+console.log("Bob's Inbox (Signed):", bob.inbox);
