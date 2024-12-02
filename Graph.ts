@@ -21,6 +21,7 @@ export type Metadata = {
     inbox: Message[];
     private publicKey: forge.pki.PublicKey;
     private privateKey: forge.pki.PrivateKey;
+    static nodes: { [id: string]: Node } = {};
   
     constructor(id: string) {
       this.id = id;
@@ -29,6 +30,7 @@ export type Metadata = {
       const { publicKey, privateKey } = generateRSAKeyPair();
       this.publicKey = publicKey;
       this.privateKey = privateKey;
+      Node.nodes[id] = this;
     }
   
     addConnection(node: Node) {
@@ -79,15 +81,87 @@ export type Metadata = {
     if (message.metadata.compressionType === "SIGNED") {
       const body = (message.body as Buffer).slice(0, message.body.length - 256);
       const signature = (message.body as Buffer).slice(-256);
-      const isValid = verifySignature(this.publicKey, body.toString(), signature);
-      if (isValid) {
-        console.log("Signature verified successfully.");
-      } else {
-        console.log("Signature verification failed.");
-      }
-    }
-    
+      // Added code: Get sender's public key for verification
+        const senderNode = Node.nodes[message.sender];
+        if (senderNode) {
+          const senderPublicKey = senderNode.publicKey;
+          const isValid = verifySignature(senderPublicKey, body.toString(), signature);
+          if (isValid) {
+            console.log("Signature verified successfully.");
+            
+            // Added code: Check if this is a confirmation message
+            try {
+              const parsedBody = JSON.parse(body.toString());
+              if (parsedBody.originalSignature && parsedBody.originalHash && parsedBody.confirmationHash && parsedBody.encryptedConfirmationHash) {
+                // This is a confirmation message
+                console.log("Received signed confirmation message.");
+                
+                // Verify the confirmation hash
+                const confirmationHash = parsedBody.confirmationHash;
+                const encryptedConfirmationHash = Buffer.from(parsedBody.encryptedConfirmationHash, 'base64');
+                
+                const isConfirmationValid = verifySignature(senderPublicKey, confirmationHash, encryptedConfirmationHash);
+                if (isConfirmationValid) {
+                  console.log("Confirmation message signature verified successfully.");
+                  console.log(`Original Signature: ${parsedBody.originalSignature}`);
+                  console.log(`Original Hash: ${parsedBody.originalHash}`);
+                  console.log(`Confirmation Hash: ${parsedBody.confirmationHash}`);
+                  console.log(`Encrypted Confirmation Hash: ${parsedBody.encryptedConfirmationHash}`);
+                } else {
+                  console.log("Confirmation message signature verification failed.");
+                }
+              } else {
+                // Not a confirmation message; send confirmation
+                // Added code: Send back signed confirmation message
+                this.sendSignedConfirmation(senderNode, body.toString(), signature);
+              }
+            } catch (e) {
+              // Not a JSON message; send confirmation
+              // Added code: Send back signed confirmation message
+              this.sendSignedConfirmation(senderNode, body.toString(), signature);
+            }
+          } else {
+            console.log("Signature verification failed.");
+          }
+        } else {
+          console.log("Sender node not found for signature verification.");
+        }
+      }   
       this.inbox.push(message);
+    }
+
+    // Helper function to compute SHA-256 hash
+    computeHash(data: string): string {
+      const md = forge.md.sha256.create();
+      md.update(data);
+      return md.digest().toHex();
+    }
+
+    // Method to send signed confirmation message
+    sendSignedConfirmation(senderNode: Node, originalMessage: string, originalSignature: Buffer) {
+      // Compute the original hash
+      const originalHash = this.computeHash(originalMessage);
+
+      // Prepare the confirmation message
+      const confirmationMessage = `Message received and verified by ${this.id}.`;
+
+      // Compute the hash of the confirmation message
+      const confirmationHash = this.computeHash(confirmationMessage);
+
+      // Sign the confirmation hash
+      const encryptedConfirmationHash = signMessage(this.privateKey, confirmationHash);
+
+      // Prepare the confirmation message body
+      const confirmationBody = JSON.stringify({
+        message: confirmationMessage,
+        originalSignature: originalSignature.toString('base64'),
+        originalHash: originalHash,
+        confirmationHash: confirmationHash,
+        encryptedConfirmationHash: encryptedConfirmationHash.toString('base64')
+      });
+
+      // Send the confirmation message back to the sender
+      this.sendMessage(senderNode, confirmationBody, "SIGNED");
     }
   }
   
