@@ -47,3 +47,9 @@ console.log("Decrypted Message:", bob.inbox[0].body);
 console.log("\nTesting Signed Message...");
 alice.sendMessage(bob, "Important message with signature", "SIGNED");
 console.log("Bob's Inbox (Signed):", bob.inbox);
+
+// Testing Signed Messages with Confirmation
+console.log("\nTesting Signed Message with Confirmation...");
+alice.sendMessage(bob, "Important message with signature", "SIGNED");
+console.log("Alice's Inbox (After Confirmation):", alice.inbox);
+
